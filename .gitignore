@@ -1,1 +1,6 @@
 /venv/
+/key-values-files_peer1
+/Key-values-files/
+/Chunks/
+/include/__pycache__/
+.idea/

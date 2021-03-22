@@ -4,16 +4,17 @@ INITIAL_TTL = 3
 
 
 def encript_message(*args):
-    """Receive some arguments in int or bytearray, concatenate then and returns a bytearray with each elements size 2"""
+    """Receive some arguments in int or bytearray, concatenate then and returns a bytearray"""
     message = bytearray()
     for arg in args:
-        if type(arg) == bytes:
-            message += arg
-        elif type(arg) != list:
-            message += arg.to_bytes(2, "big")
+        if type(arg) == int:
+            message += arg.to_bytes(2, 'big')
         else:
             for item in arg:
-                message += item.to_bytes(2, "big")
+                if type(item) == bytes:
+                    message += item
+                else:
+                    message += item.to_bytes(2, 'big')
     return message
 
 
@@ -30,21 +31,44 @@ def decode_position(message, position):
 
 
 def generate_chunk_array_info(message, id_list):
-    """Receive a message with required chunks and a list chunks ids available in the peer and return a ordered list
+    """Receive a message required chunks and a list chunks ids available in the peer and return a ordered list
     of matches"""
-    number_of_chunks = decode_position(message, 1)
+    if get_type_of_message(message) == 'HELLO':
+        number_of_chunks = decode_position(message, 1)
+        pointer = 2
+    else:  # QUERY
+        number_of_chunks = decode_position(message, 5)
+        pointer = 6
     chunk_array_info = []
     for i in range(number_of_chunks):
-        required_chunk = decode_position(message, i + 2)
+        required_chunk = decode_position(message, pointer + i)
         if required_chunk in id_list:
             chunk_array_info.append(required_chunk)
     return sorted(chunk_array_info)
 
 
-def convert_address_to_int_list(address):
-    """Receive a tuple (address, port) and convert it in a int list"""
-    address_list = []
+def convert_address_to_byte_list(address):
+    """Receive a tuple (address, port) and convert it to a byte list [b, b, b, b, bb]"""
+    byte_address = []
     for item in address[0].split('.'):
-        address_list.append(int(item))
-    address_list.append(address[1])
-    return address_list
+        byte_address.append((int(item)).to_bytes(1, 'big'))
+    byte_address.append(address[1].to_bytes(2, 'big'))
+    return byte_address
+
+
+def extract_client_address_from_query(message):
+    """Read a query message and return a set with the client ip and port"""
+    ip = ''
+    for position in range(2, 6):
+        if ip != '':
+            ip += '.'
+        ip += str(int.from_bytes(message[position: position + 1], 'big'))
+    port = int.from_bytes(message[6: 8], 'big')
+    address = (ip, port)
+    return address
+
+
+def get_ttl_and_update_message(message):
+    ttl = int.from_bytes(message[8: 10], 'big') - 1
+    new_message = message[:8] + ttl.to_bytes(2, 'big') + message[10:]
+    return ttl, new_message
