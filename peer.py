@@ -1,6 +1,9 @@
 from include import common
 import sys
+import os
 import socket
+
+# Michael Páris Alexandre Xavier - 2014062018
 
 # Peer's own address
 udp_ip = sys.argv[1].split(':')[0]
@@ -13,6 +16,7 @@ file_list_name = []
 for line in open(key_values_file):
     file_list_id.append(int(line.split(': ')[0]))
     file_list_name.append(line.split(': ')[1].replace('\n', '').replace(' ', ''))
+print(f'Chunk stored: {file_list_id}')
 
 # Array with sets (ip, port) of known peers
 known_peers_ip_port = []
@@ -40,9 +44,10 @@ while True:
 
         # Build and send the Chunk Info to the Client
         match_id_list = common.generate_chunk_array_info(message_received, file_list_id)
-        new_message = common.encript_message(common.MESSAGES['CHUNK INFO'], len(match_id_list), match_id_list)
-        peer_socket.sendto(new_message, source_address)
-        print(f'Sent a CHUNK INFO to {source_address[0]}:{source_address[1]}')
+        if len(match_id_list) > 0:
+            new_message = common.encript_message(common.MESSAGES['CHUNK INFO'], len(match_id_list), match_id_list)
+            peer_socket.sendto(new_message, source_address)
+            print(f'Sent a CHUNK INFO to {source_address[0]}:{source_address[1]} informing {match_id_list}')
 
     elif common.get_type_of_message(message_received) == 'QUERY':
         print(f'Received QUERY from {source_address[0]}:{source_address[1]}')
@@ -56,8 +61,26 @@ while True:
                     print(f'Sent a QUERY to {peer[0]}:{peer[1]}')
 
         # Build and send the Chunk Info to the Client
-        client_address = common.extract_client_address_from_query(message_received)
         match_id_list = common.generate_chunk_array_info(message_received, file_list_id)
-        new_message = common.encript_message(common.MESSAGES['CHUNK INFO'], len(match_id_list), match_id_list)
-        peer_socket.sendto(new_message, client_address)
-        print(f'Sent a CHUNK INFO to {client_address[0]}:{client_address[1]}')
+        if len(match_id_list) > 0:
+            client_address = common.extract_client_address_from_query(message_received)
+            new_message = common.encript_message(common.MESSAGES['CHUNK INFO'], len(match_id_list), match_id_list)
+            peer_socket.sendto(new_message, client_address)
+            print(f'Sent a CHUNK INFO to {client_address[0]}:{client_address[1]} informing chunks {match_id_list}')
+
+    else:
+        print(f'Received GET from {source_address[0]}:{source_address[1]}')
+        number_of_chunks_asked = common.decode_position(message_received, 1)
+
+        for chunk in range(2, number_of_chunks_asked + 2):
+            chunk_id = common.decode_position(message_received, chunk)
+            chunk_index = file_list_id.index(chunk_id)
+
+            chunk_file = open(file_list_name[chunk_index], 'rb')
+            chunk_data = chunk_file.read(1026)
+            chunk_size = os.path.getsize(file_list_name[chunk_index])
+            new_message = common.encript_message(common.MESSAGES['RESPONSE'], chunk_id, chunk_size, chunk_data)
+            chunk_file.close()
+
+            peer_socket.sendto(new_message, source_address)
+            print(f'Sent a RESPONSE to {source_address[0]}:{source_address[1]} with chunk {chunk_id}')
